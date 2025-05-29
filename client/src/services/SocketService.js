@@ -8,7 +8,7 @@ class SocketService {
     this.maxReconnectAttempts = 5;
   }
 
-  connect(serverUrl = 'http://localhost:5000') {
+  connect(serverUrl = 'https://polling-intervue-server.onrender.com/') {
     if (!this.socket) {
       console.log('Connecting to server:', serverUrl);
       
