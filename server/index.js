@@ -29,14 +29,16 @@ mongoose.connect(process.env.MONGO_URI, {
   console.error('MongoDB connection error:', err.message);
 });
 
-
 // Schema
 const pollSchema = new mongoose.Schema({
   question: String,
   options: [String],
+  correct: [Boolean],
+  timeLimit: { type: Number, default: 60 },
   responses: [{
     studentName: String,
     answer: String,
+    isCorrect: Boolean,
     timestamp: { type: Date, default: Date.now }
   }],
   isActive: { type: Boolean, default: true },
@@ -56,7 +58,7 @@ io.on('connection', (socket) => {
 
   socket.on('join_teacher', () => {
     socket.join('teachers');
-    socket.isTeacher = true; // Mark this socket as teacher
+    socket.isTeacher = true;
     console.log('Teacher joined');
     
     // Send current state to teacher
@@ -72,7 +74,7 @@ io.on('connection', (socket) => {
   socket.on('join_student', (studentName) => {
     socket.studentName = studentName;
     socket.join('students');
-    socket.isStudent = true; // Mark this socket as student
+    socket.isStudent = true;
     connectedStudents.add(studentName);
     console.log('Student joined:', studentName);
 
@@ -114,9 +116,15 @@ io.on('connection', (socket) => {
         console.log('Previous poll marked as inactive');
       }
 
+      // Extract and validate time limit
+      const timeLimit = parseInt(pollData.timeLimit) || 60;
+      console.log(`Poll time limit set to: ${timeLimit} seconds`);
+
       const newPoll = new Poll({
         question: pollData.question,
         options: pollData.options,
+        correct: pollData.correct || [],
+        timeLimit: timeLimit,
         responses: []
       });
 
@@ -126,18 +134,20 @@ io.on('connection', (socket) => {
         _id: newPoll._id,
         question: pollData.question,
         options: pollData.options,
+        correct: pollData.correct || [],
+        timeLimit: timeLimit,
         responses: [],
         isActive: true,
-        timeRemaining: 60,
-        duration: 60
+        timeRemaining: timeLimit,
+        duration: timeLimit
       };
 
-      console.log('New poll created and saved to memory:', activePoll);
+      console.log(`New poll created with ${timeLimit} seconds timer:`, activePoll.question);
 
       // First, notify teachers that poll was created successfully
       io.to('teachers').emit('poll_created', activePoll);
       
-      // Then notify all students of new poll - this is the key fix
+      // Then notify all students of new poll
       console.log('Sending new poll to all students...');
       io.to('students').emit('new_poll', {
         ...activePoll,
@@ -150,8 +160,8 @@ io.on('connection', (socket) => {
         hasAnswered: false
       });
 
-      // Start the timer after everything is set up
-      startPollTimer();
+      // Start the timer with the specified duration
+      startPollTimer(timeLimit);
       
       console.log('Poll creation process completed');
       
@@ -174,9 +184,14 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // Check if answer is correct
+      const answerIndex = activePoll.options.indexOf(answer);
+      const isCorrect = answerIndex !== -1 && activePoll.correct && activePoll.correct[answerIndex] === true;
+
       const response = {
         studentName: socket.studentName,
         answer,
+        isCorrect,
         timestamp: new Date()
       };
 
@@ -187,10 +202,10 @@ io.on('connection', (socket) => {
         $push: { responses: response }
       });
 
-      console.log(`Answer submitted by ${socket.studentName}: ${answer}`);
+      console.log(`Answer submitted by ${socket.studentName}: ${answer} (${isCorrect ? 'Correct' : 'Incorrect'})`);
 
       // Notify student that answer was submitted successfully
-      socket.emit('answer_submitted', { answer });
+      socket.emit('answer_submitted', { answer, isCorrect });
 
       // Send updated results to everyone
       const results = calculateResults();
@@ -215,112 +230,97 @@ io.on('connection', (socket) => {
     }
   });
 
-
-
-
-
-
-
-
-
-
-
-
+  // Chat functionality
   socket.on('join_chat', (data) => {
-  console.log('User joined chat:', data.username, 'Role:', data.userRole);
-  
-  // Broadcast to others that user joined chat
-  socket.broadcast.emit('user_joined_chat', {
-    username: data.username,
-    userRole: data.userRole,
-    timestamp: new Date()
-  });
-});
-
-socket.on('send_chat_message', (messageData) => {
-  if (!messageData.message || !messageData.username) {
-    socket.emit('chat_error', 'Invalid message data');
-    return;
-  }
-
-  console.log('Chat message from', messageData.username, ':', messageData.message);
-
-  // Broadcast message to all connected clients
-  io.emit('chat_message', {
-    username: messageData.username,
-    message: messageData.message,
-    timestamp: messageData.timestamp || new Date(),
-    userRole: messageData.userRole
-  });
-});
-
-socket.on('typing', (data) => {
-  if (data.username) {
-    // Broadcast typing indicator to others
-    socket.broadcast.emit('user_typing', {
-      username: data.username
-    });
-  }
-});
-
-socket.on('stop_typing', () => {
-  // Broadcast stop typing to others
-  socket.broadcast.emit('user_stopped_typing');
-});
-
-socket.on('kick_student', (data) => {
-  // Only teachers can kick students
-  if (!socket.isTeacher) {
-    socket.emit('kick_error', 'Only teachers can kick students');
-    return;
-  }
-
-  const { studentName } = data;
-  if (!studentName) {
-    socket.emit('kick_error', 'Student name is required');
-    return;
-  }
-
-  console.log('Teacher attempting to kick student:', studentName);
-
-  // Find the student socket
-  const studentSocket = Array.from(io.sockets.sockets.values())
-    .find(s => s.studentName === studentName && s.isStudent);
-
-  if (studentSocket) {
-    // Remove student from connected students
-    connectedStudents.delete(studentName);
-
-    // Notify the student they've been kicked
-    studentSocket.emit('kicked_from_session', {
-      reason: 'Removed by teacher',
+    console.log('User joined chat:', data.username, 'Role:', data.userRole);
+    
+    // Broadcast to others that user joined chat
+    socket.broadcast.emit('user_joined_chat', {
+      username: data.username,
+      userRole: data.userRole,
       timestamp: new Date()
     });
+  });
 
-    // Broadcast to all users that student was kicked
-    io.emit('student_kicked', {
-      studentName: studentName,
-      timestamp: new Date()
+  socket.on('send_chat_message', (messageData) => {
+    if (!messageData.message || !messageData.username) {
+      socket.emit('chat_error', 'Invalid message data');
+      return;
+    }
+
+    console.log('Chat message from', messageData.username, ':', messageData.message);
+
+    // Broadcast message to all connected clients
+    io.emit('chat_message', {
+      username: messageData.username,
+      message: messageData.message,
+      timestamp: messageData.timestamp || new Date(),
+      userRole: messageData.userRole
     });
+  });
 
-    // Update teachers with new student list
-    io.to('teachers').emit('students_update', Array.from(connectedStudents));
+  socket.on('typing', (data) => {
+    if (data.username) {
+      // Broadcast typing indicator to others
+      socket.broadcast.emit('user_typing', {
+        username: data.username
+      });
+    }
+  });
 
-    // Disconnect the student
-    setTimeout(() => {
-      studentSocket.disconnect(true);
-    }, 1000);
+  socket.on('stop_typing', () => {
+    // Broadcast stop typing to others
+    socket.broadcast.emit('user_stopped_typing');
+  });
 
-    console.log('Student kicked successfully:', studentName);
-  } else {
-    socket.emit('kick_error', 'Student not found or already disconnected');
-  }
-});
+  socket.on('kick_student', (data) => {
+    // Only teachers can kick students
+    if (!socket.isTeacher) {
+      socket.emit('kick_error', 'Only teachers can kick students');
+      return;
+    }
 
-// Add this handler for when students are kicked
-socket.on('kicked_from_session', () => {
-  console.log('Student received kick notification');
-});
+    const { studentName } = data;
+    if (!studentName) {
+      socket.emit('kick_error', 'Student name is required');
+      return;
+    }
+
+    console.log('Teacher attempting to kick student:', studentName);
+
+    // Find the student socket
+    const studentSocket = Array.from(io.sockets.sockets.values())
+      .find(s => s.studentName === studentName && s.isStudent);
+
+    if (studentSocket) {
+      // Remove student from connected students
+      connectedStudents.delete(studentName);
+
+      // Notify the student they've been kicked
+      studentSocket.emit('kicked_from_session', {
+        reason: 'Removed by teacher',
+        timestamp: new Date()
+      });
+
+      // Broadcast to all users that student was kicked
+      io.emit('student_kicked', {
+        studentName: studentName,
+        timestamp: new Date()
+      });
+
+      // Update teachers with new student list
+      io.to('teachers').emit('students_update', Array.from(connectedStudents));
+
+      // Disconnect the student
+      setTimeout(() => {
+        studentSocket.disconnect(true);
+      }, 1000);
+
+      console.log('Student kicked successfully:', studentName);
+    } else {
+      socket.emit('kick_error', 'Student not found or already disconnected');
+    }
+  });
 
   socket.on('disconnect', () => {
     if (socket.studentName) {
@@ -333,10 +333,10 @@ socket.on('kicked_from_session', () => {
 });
 
 // Helper Functions
-function startPollTimer() {
-  let timeLeft = 60;
+function startPollTimer(duration = 60) {
+  let timeLeft = duration;
   
-  console.log('Starting poll timer: 60 seconds');
+  console.log(`Starting poll timer: ${duration} seconds`);
 
   pollTimer = setInterval(() => {
     timeLeft--;
@@ -347,6 +347,8 @@ function startPollTimer() {
     
     // Send timer update to all connected clients
     io.emit('timer_update', timeLeft);
+
+    console.log(`Poll timer: ${timeLeft} seconds remaining`);
 
     if (timeLeft <= 0) {
       console.log('Poll timer expired');
@@ -384,9 +386,12 @@ async function endPoll() {
     io.emit('poll_results', finalResults);
     
     console.log('Poll ended. Final results:', finalResults.summary);
+    console.log(`Total responses: ${finalResults.totalResponses}/${finalResults.totalStudents}`);
     
-    // Reset active poll after sending results
-    // Don't set activePoll to null immediately to allow students to see results
+    // Reset active poll after a delay to allow students to see results
+    setTimeout(() => {
+      console.log('Clearing active poll from memory');
+    }, 5000);
   }
 }
 
@@ -401,18 +406,41 @@ function calculateResults() {
   if (!activePoll) return null;
   
   const summary = {};
-  activePoll.options.forEach(opt => {
-    summary[opt] = activePoll.responses.filter(r => r.answer === opt).length;
+  const correctAnswers = {};
+  
+  // Initialize counters
+  activePoll.options.forEach((opt, index) => {
+    summary[opt] = 0;
+    correctAnswers[opt] = activePoll.correct && activePoll.correct[index] === true;
   });
+  
+  // Count responses
+  activePoll.responses.forEach(response => {
+    if (summary.hasOwnProperty(response.answer)) {
+      summary[response.answer]++;
+    }
+  });
+  
+  // Calculate accuracy statistics
+  const correctResponsesCount = activePoll.responses.filter(r => r.isCorrect).length;
+  const accuracy = activePoll.responses.length > 0 
+    ? Math.round((correctResponsesCount / activePoll.responses.length) * 100) 
+    : 0;
   
   return {
     question: activePoll.question,
     options: activePoll.options,
+    correct: activePoll.correct,
     responses: activePoll.responses,
     summary,
+    correctAnswers,
     totalResponses: activePoll.responses.length,
     totalStudents: connectedStudents.size,
-    isActive: activePoll.isActive
+    correctResponsesCount,
+    accuracy,
+    isActive: activePoll.isActive,
+    timeLimit: activePoll.timeLimit,
+    timeRemaining: activePoll.timeRemaining
   };
 }
 
@@ -436,18 +464,57 @@ app.get('/api/active-poll', (req, res) => {
   });
 });
 
+app.get('/api/poll/:id', async (req, res) => {
+  try {
+    const poll = await Poll.findById(req.params.id);
+    if (!poll) {
+      return res.status(404).json({ error: 'Poll not found' });
+    }
+    res.json(poll);
+  } catch (error) {
+    console.error('Error fetching poll:', error);
+    res.status(500).json({ error: 'Error fetching poll' });
+  }
+});
+
+app.delete('/api/poll/:id', async (req, res) => {
+  try {
+    const poll = await Poll.findByIdAndDelete(req.params.id);
+    if (!poll) {
+      return res.status(404).json({ error: 'Poll not found' });
+    }
+    res.json({ message: 'Poll deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting poll:', error);
+    res.status(500).json({ error: 'Error deleting poll' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    activePoll: activePoll ? activePoll.question : null,
-    connectedStudents: connectedStudents.size
+    activePoll: activePoll ? {
+      question: activePoll.question,
+      timeRemaining: activePoll.timeRemaining,
+      timeLimit: activePoll.timeLimit,
+      responses: activePoll.responses.length
+    } : null,
+    connectedStudents: connectedStudents.size,
+    serverUptime: process.uptime()
   });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Socket.IO ready for connections`);
 });
