@@ -1,3 +1,4 @@
+
 import io from 'socket.io-client';
 
 class SocketService {
@@ -8,7 +9,7 @@ class SocketService {
     this.maxReconnectAttempts = 5;
   }
 
-  connect(serverUrl = 'https://polling-intervue-server.onrender.com/') {
+  connect(serverUrl = 'https://polling-intervue-server.onrender.com') {
     if (!this.socket) {
       console.log('Connecting to server:', serverUrl);
       
