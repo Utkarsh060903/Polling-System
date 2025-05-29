@@ -34,30 +34,35 @@
 
 ### Installation
 
-1. **Install Backend Dependencies**
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/utkarsh060903/polling-system.git
+   ```
+
+2. **Install Backend Dependencies**
    ```bash
    cd server
    npm install
    ```
 
-2. **Install Frontend Dependencies**
+3. **Install Frontend Dependencies**
    ```bash
    cd client
    npm install
    ```
 
-3. **Start the Backend Server**
+4. **Start the Backend Server**
    ```bash
    cd server
    node index.js
    ```
 
-4. **Start the Frontend Application**
+5. **Start the Frontend Application**
    ```bash
    cd client
    npm run dev
    ```
 
-5. **Access the Application**
+6. **Access the Application**
    - Open your browser and navigate to `http://localhost:5173`
    - Choose your role: Teacher or Student
