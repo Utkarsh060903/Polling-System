@@ -45,12 +45,12 @@ const pollSchema = new mongoose.Schema({
 
 const Poll = mongoose.model('Poll', pollSchema);
 
-// In-memory state
+
 let activePoll = null;
 let connectedStudents = new Set();
 let pollTimer = null;
 
-// Socket.IO
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -59,7 +59,7 @@ io.on('connection', (socket) => {
     socket.isTeacher = true; // Mark this socket as teacher
     console.log('Teacher joined');
     
-    // Send current state to teacher
+
     socket.emit('students_update', Array.from(connectedStudents));
     
     if (activePoll) {
@@ -72,14 +72,12 @@ io.on('connection', (socket) => {
   socket.on('join_student', (studentName) => {
     socket.studentName = studentName;
     socket.join('students');
-    socket.isStudent = true; // Mark this socket as student
+    socket.isStudent = true;
     connectedStudents.add(studentName);
     console.log('Student joined:', studentName);
 
-    // Update all teachers with new student list
     io.to('teachers').emit('students_update', Array.from(connectedStudents));
 
-    // Send active poll to newly joined student
     if (activePoll && activePoll.isActive) {
       const hasAnswered = activePoll.responses.some(r => r.studentName === studentName);
       console.log(`Sending active poll to ${studentName}, hasAnswered: ${hasAnswered}`);
@@ -89,8 +87,7 @@ io.on('connection', (socket) => {
         hasAnswered,
         timeRemaining: activePoll.timeRemaining || 0
       });
-      
-      // If student hasn't answered, send new_poll to trigger poll view
+
       if (!hasAnswered) {
         socket.emit('new_poll', {
           ...activePoll,
@@ -105,11 +102,9 @@ io.on('connection', (socket) => {
     try {
       console.log('Creating new poll:', pollData);
       
-      // Clear any existing poll and timer
       clearExistingTimer();
       
       if (activePoll) {
-        // Mark previous poll as inactive in database
         await Poll.findByIdAndUpdate(activePoll._id, { isActive: false });
         console.log('Previous poll marked as inactive');
       }
@@ -134,23 +129,22 @@ io.on('connection', (socket) => {
 
       console.log('New poll created and saved to memory:', activePoll);
 
-      // First, notify teachers that poll was created successfully
       io.to('teachers').emit('poll_created', activePoll);
       
-      // Then notify all students of new poll - this is the key fix
+
       console.log('Sending new poll to all students...');
       io.to('students').emit('new_poll', {
         ...activePoll,
         hasAnswered: false
       });
       
-      // Also emit to all sockets (fallback)
+
       io.emit('new_poll_broadcast', {
         ...activePoll,
         hasAnswered: false
       });
 
-      // Start the timer after everything is set up
+
       startPollTimer();
       
       console.log('Poll creation process completed');
@@ -182,21 +176,17 @@ io.on('connection', (socket) => {
 
       activePoll.responses.push(response);
 
-      // Update database
       await Poll.findByIdAndUpdate(activePoll._id, {
         $push: { responses: response }
       });
 
       console.log(`Answer submitted by ${socket.studentName}: ${answer}`);
 
-      // Notify student that answer was submitted successfully
       socket.emit('answer_submitted', { answer });
 
-      // Send updated results to everyone
       const results = calculateResults();
       io.emit('poll_results', results);
 
-      // Check if all students have answered
       if (allStudentsAnswered()) {
         console.log('All students have answered, ending poll');
         endPoll();
@@ -228,9 +218,7 @@ io.on('connection', (socket) => {
 
   socket.on('join_chat', (data) => {
   console.log('User joined chat:', data.username, 'Role:', data.userRole);
-  
-  // Broadcast to others that user joined chat
-  socket.broadcast.emit('user_joined_chat', {
+    socket.broadcast.emit('user_joined_chat', {
     username: data.username,
     userRole: data.userRole,
     timestamp: new Date()
@@ -245,7 +233,6 @@ socket.on('send_chat_message', (messageData) => {
 
   console.log('Chat message from', messageData.username, ':', messageData.message);
 
-  // Broadcast message to all connected clients
   io.emit('chat_message', {
     username: messageData.username,
     message: messageData.message,
@@ -256,7 +243,6 @@ socket.on('send_chat_message', (messageData) => {
 
 socket.on('typing', (data) => {
   if (data.username) {
-    // Broadcast typing indicator to others
     socket.broadcast.emit('user_typing', {
       username: data.username
     });
@@ -264,12 +250,10 @@ socket.on('typing', (data) => {
 });
 
 socket.on('stop_typing', () => {
-  // Broadcast stop typing to others
   socket.broadcast.emit('user_stopped_typing');
 });
 
 socket.on('kick_student', (data) => {
-  // Only teachers can kick students
   if (!socket.isTeacher) {
     socket.emit('kick_error', 'Only teachers can kick students');
     return;
@@ -283,21 +267,21 @@ socket.on('kick_student', (data) => {
 
   console.log('Teacher attempting to kick student:', studentName);
 
-  // Find the student socket
+
   const studentSocket = Array.from(io.sockets.sockets.values())
     .find(s => s.studentName === studentName && s.isStudent);
 
   if (studentSocket) {
-    // Remove student from connected students
+
     connectedStudents.delete(studentName);
 
-    // Notify the student they've been kicked
+
     studentSocket.emit('kicked_from_session', {
       reason: 'Removed by teacher',
       timestamp: new Date()
     });
 
-    // Broadcast to all users that student was kicked
+
     io.emit('student_kicked', {
       studentName: studentName,
       timestamp: new Date()
@@ -317,7 +301,6 @@ socket.on('kick_student', (data) => {
   }
 });
 
-// Add this handler for when students are kicked
 socket.on('kicked_from_session', () => {
   console.log('Student received kick notification');
 });
@@ -345,7 +328,6 @@ function startPollTimer() {
       activePoll.timeRemaining = timeLeft;
     }
     
-    // Send timer update to all connected clients
     io.emit('timer_update', timeLeft);
 
     if (timeLeft <= 0) {
@@ -369,7 +351,6 @@ async function endPoll() {
   if (activePoll) {
     console.log('Ending poll:', activePoll.question);
     
-    // Mark poll as inactive in database
     try {
       await Poll.findByIdAndUpdate(activePoll._id, { isActive: false });
     } catch (error) {
@@ -379,14 +360,11 @@ async function endPoll() {
     activePoll.isActive = false;
     const finalResults = calculateResults();
     
-    // Send final results to everyone
     io.emit('poll_ended', finalResults);
     io.emit('poll_results', finalResults);
     
     console.log('Poll ended. Final results:', finalResults.summary);
     
-    // Reset active poll after sending results
-    // Don't set activePoll to null immediately to allow students to see results
   }
 }
 

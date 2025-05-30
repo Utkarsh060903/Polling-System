@@ -64,9 +64,7 @@ const TeacherDashboard = ({ onCreatePoll }) => {
           Enter your question
         </label>
 
-        {/* Wrapper with limited width */}
         <div className="w-[60%]">
-          {/* Timer above textarea, aligned right */}
           <div className="flex justify-end mb-1">
             <select
               value={timeLimit}
@@ -79,7 +77,6 @@ const TeacherDashboard = ({ onCreatePoll }) => {
             </select>
           </div>
 
-          {/* Textarea with internal counter */}
           <div className="relative">
             <textarea
               value={newQuestion}
@@ -129,7 +126,6 @@ const TeacherDashboard = ({ onCreatePoll }) => {
               placeholder={`Option ${index + 1}`}
             />
 
-            {/* Correct Option Radio Buttons */}
             <div className="flex items-center gap-4 min-w-[120px]">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -165,10 +161,8 @@ const TeacherDashboard = ({ onCreatePoll }) => {
         </button>
       </div>
 
-      {/* Divider Line */}
       <div className="border w-full border-[#B6B6B6] my-8"></div>
 
-      {/* Ask Question Button */}
       <div className="flex justify-end">
         <button
           style={{

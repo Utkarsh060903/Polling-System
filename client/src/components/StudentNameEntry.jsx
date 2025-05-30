@@ -47,30 +47,17 @@ const StudentNameEntry = ({ onNameSubmit }) => {
             className="w-full bg-gray-100 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
 
-          {/* <button
+          <button
             onClick={handleSubmit}
             disabled={!tempName.trim()}
-            className={`py-3 rounded-full text-white text-sm font-medium transition-all ${
+            className={`px-8 py-3 rounded-full text-white font-semibold text-base transition-all ${
               tempName.trim()
-                ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700"
+                ? "bg-[linear-gradient(90deg,_#7B5DF0_0%,_#486AE0_100%)]"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
           >
             Continue
-          </button> */}
-
-          <button
-  onClick={handleSubmit}
-  disabled={!tempName.trim()}
-  className={`px-8 py-3 rounded-full text-white font-semibold text-base transition-all ${
-    tempName.trim()
-      ? "bg-[linear-gradient(90deg,_#7B5DF0_0%,_#486AE0_100%)]"
-      : "bg-gray-300 cursor-not-allowed"
-  }`}
->
-  Continue
-</button>
-
+          </button>
         </div>
       </div>
     </div>

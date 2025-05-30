@@ -69,7 +69,6 @@ const PollResults = ({
         )}
       </div>
 
-      {/* Show this only for teacher */}
       {userRole === "teacher" && (
         <button
           onClick={handleAskNew}
