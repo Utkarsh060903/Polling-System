@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 import io from "socket.io-client";
+=======
+
+import io from 'socket.io-client';
+>>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
 
 class SocketService {
   constructor() {
@@ -8,7 +13,11 @@ class SocketService {
     this.maxReconnectAttempts = 5;
   }
 
+<<<<<<< HEAD
   connect(serverUrl = "https://polling-intervue-server.onrender.com/") {
+=======
+  connect(serverUrl = 'https://polling-intervue-server.onrender.com') {
+>>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
     if (!this.socket) {
       console.log("Connecting to server:", serverUrl);
 
