@@ -47,12 +47,12 @@ const pollSchema = new mongoose.Schema({
 
 const Poll = mongoose.model('Poll', pollSchema);
 
-
+// In-memory state
 let activePoll = null;
 let connectedStudents = new Set();
 let pollTimer = null;
 
-
+// Socket.IO
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
@@ -61,7 +61,7 @@ io.on('connection', (socket) => {
     socket.isTeacher = true;
     console.log('Teacher joined');
     
-
+    // Send current state to teacher
     socket.emit('students_update', Array.from(connectedStudents));
     
     if (activePoll) {
@@ -78,8 +78,10 @@ io.on('connection', (socket) => {
     connectedStudents.add(studentName);
     console.log('Student joined:', studentName);
 
+    // Update all teachers with new student list
     io.to('teachers').emit('students_update', Array.from(connectedStudents));
 
+    // Send active poll to newly joined student
     if (activePoll && activePoll.isActive) {
       const hasAnswered = activePoll.responses.some(r => r.studentName === studentName);
       console.log(`Sending active poll to ${studentName}, hasAnswered: ${hasAnswered}`);
@@ -89,7 +91,8 @@ io.on('connection', (socket) => {
         hasAnswered,
         timeRemaining: activePoll.timeRemaining || 0
       });
-
+      
+      // If student hasn't answered, send new_poll to trigger poll view
       if (!hasAnswered) {
         socket.emit('new_poll', {
           ...activePoll,
@@ -104,9 +107,11 @@ io.on('connection', (socket) => {
     try {
       console.log('Creating new poll:', pollData);
       
+      // Clear any existing poll and timer
       clearExistingTimer();
       
       if (activePoll) {
+        // Mark previous poll as inactive in database
         await Poll.findByIdAndUpdate(activePoll._id, { isActive: false });
         console.log('Previous poll marked as inactive');
       }
@@ -139,32 +144,24 @@ io.on('connection', (socket) => {
 
       console.log(`New poll created with ${timeLimit} seconds timer:`, activePoll.question);
 
+      // First, notify teachers that poll was created successfully
       io.to('teachers').emit('poll_created', activePoll);
       
-<<<<<<< HEAD
-
-=======
       // Then notify all students of new poll
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
       console.log('Sending new poll to all students...');
       io.to('students').emit('new_poll', {
         ...activePoll,
         hasAnswered: false
       });
       
-
+      // Also emit to all sockets (fallback)
       io.emit('new_poll_broadcast', {
         ...activePoll,
         hasAnswered: false
       });
 
-<<<<<<< HEAD
-
-      startPollTimer();
-=======
       // Start the timer with the specified duration
       startPollTimer(timeLimit);
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
       
       console.log('Poll creation process completed');
       
@@ -200,22 +197,21 @@ io.on('connection', (socket) => {
 
       activePoll.responses.push(response);
 
+      // Update database
       await Poll.findByIdAndUpdate(activePoll._id, {
         $push: { responses: response }
       });
 
       console.log(`Answer submitted by ${socket.studentName}: ${answer} (${isCorrect ? 'Correct' : 'Incorrect'})`);
 
-<<<<<<< HEAD
-      socket.emit('answer_submitted', { answer });
-=======
       // Notify student that answer was submitted successfully
       socket.emit('answer_submitted', { answer, isCorrect });
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
 
+      // Send updated results to everyone
       const results = calculateResults();
       io.emit('poll_results', results);
 
+      // Check if all students have answered
       if (allStudentsAnswered()) {
         console.log('All students have answered, ending poll');
         endPoll();
@@ -236,86 +232,16 @@ io.on('connection', (socket) => {
 
   // Chat functionality
   socket.on('join_chat', (data) => {
-<<<<<<< HEAD
-  console.log('User joined chat:', data.username, 'Role:', data.userRole);
-    socket.broadcast.emit('user_joined_chat', {
-    username: data.username,
-    userRole: data.userRole,
-    timestamp: new Date()
-  });
-});
-
-socket.on('send_chat_message', (messageData) => {
-  if (!messageData.message || !messageData.username) {
-    socket.emit('chat_error', 'Invalid message data');
-    return;
-  }
-
-  console.log('Chat message from', messageData.username, ':', messageData.message);
-
-  io.emit('chat_message', {
-    username: messageData.username,
-    message: messageData.message,
-    timestamp: messageData.timestamp || new Date(),
-    userRole: messageData.userRole
-  });
-});
-
-socket.on('typing', (data) => {
-  if (data.username) {
-    socket.broadcast.emit('user_typing', {
-      username: data.username
-    });
-  }
-});
-
-socket.on('stop_typing', () => {
-  socket.broadcast.emit('user_stopped_typing');
-});
-
-socket.on('kick_student', (data) => {
-  if (!socket.isTeacher) {
-    socket.emit('kick_error', 'Only teachers can kick students');
-    return;
-  }
-
-  const { studentName } = data;
-  if (!studentName) {
-    socket.emit('kick_error', 'Student name is required');
-    return;
-  }
-
-  console.log('Teacher attempting to kick student:', studentName);
-
-
-  const studentSocket = Array.from(io.sockets.sockets.values())
-    .find(s => s.studentName === studentName && s.isStudent);
-
-  if (studentSocket) {
-
-    connectedStudents.delete(studentName);
-
-
-    studentSocket.emit('kicked_from_session', {
-      reason: 'Removed by teacher',
-=======
     console.log('User joined chat:', data.username, 'Role:', data.userRole);
     
     // Broadcast to others that user joined chat
     socket.broadcast.emit('user_joined_chat', {
       username: data.username,
       userRole: data.userRole,
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
       timestamp: new Date()
     });
   });
 
-<<<<<<< HEAD
-
-    io.emit('student_kicked', {
-      studentName: studentName,
-      timestamp: new Date()
-=======
   socket.on('send_chat_message', (messageData) => {
     if (!messageData.message || !messageData.username) {
       socket.emit('chat_error', 'Invalid message data');
@@ -330,7 +256,6 @@ socket.on('kick_student', (data) => {
       message: messageData.message,
       timestamp: messageData.timestamp || new Date(),
       userRole: messageData.userRole
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
     });
   });
 
@@ -355,11 +280,6 @@ socket.on('kick_student', (data) => {
       return;
     }
 
-<<<<<<< HEAD
-socket.on('kicked_from_session', () => {
-  console.log('Student received kick notification');
-});
-=======
     const { studentName } = data;
     if (!studentName) {
       socket.emit('kick_error', 'Student name is required');
@@ -401,7 +321,6 @@ socket.on('kicked_from_session', () => {
       socket.emit('kick_error', 'Student not found or already disconnected');
     }
   });
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
 
   socket.on('disconnect', () => {
     if (socket.studentName) {
@@ -426,6 +345,7 @@ function startPollTimer(duration = 60) {
       activePoll.timeRemaining = timeLeft;
     }
     
+    // Send timer update to all connected clients
     io.emit('timer_update', timeLeft);
 
     console.log(`Poll timer: ${timeLeft} seconds remaining`);
@@ -451,6 +371,7 @@ async function endPoll() {
   if (activePoll) {
     console.log('Ending poll:', activePoll.question);
     
+    // Mark poll as inactive in database
     try {
       await Poll.findByIdAndUpdate(activePoll._id, { isActive: false });
     } catch (error) {
@@ -460,19 +381,17 @@ async function endPoll() {
     activePoll.isActive = false;
     const finalResults = calculateResults();
     
+    // Send final results to everyone
     io.emit('poll_ended', finalResults);
     io.emit('poll_results', finalResults);
     
     console.log('Poll ended. Final results:', finalResults.summary);
     console.log(`Total responses: ${finalResults.totalResponses}/${finalResults.totalStudents}`);
     
-<<<<<<< HEAD
-=======
     // Reset active poll after a delay to allow students to see results
     setTimeout(() => {
       console.log('Clearing active poll from memory');
     }, 5000);
->>>>>>> c33ea7f81ce8043e88a606d33c522dce0c0249d5
   }
 }
 
